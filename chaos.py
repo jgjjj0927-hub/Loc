@@ -32,7 +32,7 @@ def resource_path(relative_path):
 def play_sound():
     try:
         pygame.mixer.init()
-        sounds = ["1.wav", "2.wav"] # Наши файлы
+        sounds = ["1.wav", "2.wav"]
         
         while True:
             for s in sounds:
@@ -40,7 +40,6 @@ def play_sound():
                 if os.path.exists(path):
                     pygame.mixer.music.load(path)
                     pygame.mixer.music.play()
-                    # Ждем, пока трек не доиграет до конца
                     while pygame.mixer.music.get_busy():
                         time.sleep(0.1)
                 else:
@@ -74,29 +73,40 @@ def flying_images(root):
         for file in os.listdir(assets_path):
             if file.lower().endswith((".png", ".jpg", ".jpeg")):
                 img = Image.open(os.path.join(assets_path, file))
-                # Ресайзим картинку
-                img = img.resize((random.randint(100, 300), random.randint(100, 300)))
+                img = img.resize((random.randint(150, 300), random.randint(150, 300)))
                 imgs.append(ImageTk.PhotoImage(img))
         
         if not imgs: 
             return
 
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
         flying_windows = []
-        for _ in range(15):
+        
+        for _ in range(12): # 12 летающих окон
             win = tk.Toplevel(root)
             win.overrideredirect(True)
             win.attributes("-topmost", True)
+            
+            # Случайная стартовая позиция
+            start_x = random.randint(0, screen_w - 200)
+            start_y = random.randint(0, screen_h - 200)
+            win.geometry(f"+{start_x}+{start_y}")
+            
             lbl = tk.Label(win, bg="black") 
             lbl.pack()
-            flying_windows.append((win, lbl, random.choice(imgs)))
+            flying_windows.append([win, lbl, random.choice(imgs)])
 
-        velocities = [[random.choice([-15, 15]), random.choice([-15, 15])] for _ in flying_windows]
-        screen_w = root.winfo_screenwidth()
-        screen_h = root.winfo_screenheight()
+        # Скорость для каждого окна (от 5 до 15 пикселей за кадр)
+        velocities = [[random.choice([-1, 1]) * random.randint(5, 15), 
+                       random.choice([-1, 1]) * random.randint(5, 15)] for _ in flying_windows]
 
         def move():
-            for i, (win, lbl, img) in enumerate(flying_windows):
-                if random.random() < 0.2:
+            for i, data in enumerate(flying_windows):
+                win, lbl, img = data
+                
+                # Случайная смена картинки
+                if random.random() < 0.1:
                     lbl.config(image=random.choice(imgs))
                 
                 x = win.winfo_x()
@@ -105,8 +115,11 @@ def flying_images(root):
                 x += velocities[i][0]
                 y += velocities[i][1]
                 
-                if x < 0 or x > screen_w - 150: velocities[i][0] *= -1
-                if y < 0 or y > screen_h - 150: velocities[i][1] *= -1
+                # Отскок от краев
+                if x <= 0 or x >= screen_w - 150: 
+                    velocities[i][0] *= -1
+                if y <= 0 or y >= screen_h - 150: 
+                    velocities[i][1] *= -1
                 
                 win.geometry(f"+{x}+{y}")
             
@@ -119,15 +132,20 @@ def flying_images(root):
 def chaos_loop(root):
     while True:
         spawn_error_window(root)
-        time.sleep(0.3)
+        time.sleep(0.25) # Интервал ошибок
 
 # ================= ЗАПУСК =================
 def main():
     root = tk.Tk()
-    root.withdraw()
+    root.withdraw() # Скрываем основное окно
     
+    # Запуск музыки
     threading.Thread(target=play_sound, daemon=True).start()
+    
+    # Запуск картинок
     root.after(100, lambda: flying_images(root))
+    
+    # Запуск ошибок
     threading.Thread(target=chaos_loop, args=(root,), daemon=True).start()
 
     root.mainloop()
