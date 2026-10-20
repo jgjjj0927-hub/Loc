@@ -1,17 +1,14 @@
 # language: Python, file: chaos.py
 import tkinter as tk
-from tkinter import messagebox
 from PIL import Image, ImageTk
 import random
 import threading
 import time
 import os
 import sys
-import winsound
+import pygame
 
 # ================= НАСТРОЙКИ =================
-SCREEN_W = 1920  # Можно не менять, скрипт сам подстроится под экран
-SCREEN_H = 1080
 ERROR_TEXTS = [
     "CRITICAL ERROR: 0x000000FF",
     "SYSTEM32 HALTED",
@@ -23,6 +20,7 @@ ERROR_TEXTS = [
     "UNKNOWN SOFTWARE EXCEPTION"
 ]
 
+# ================= ПУТИ =================
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
@@ -30,113 +28,106 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+# ================= ЗВУК (ПО ОЧЕРЕДИ) =================
+def play_sound():
+    try:
+        pygame.mixer.init()
+        sounds = ["1.wav", "2.wav"] # Наши файлы
+        
+        while True:
+            for s in sounds:
+                path = resource_path(s)
+                if os.path.exists(path):
+                    pygame.mixer.music.load(path)
+                    pygame.mixer.music.play()
+                    # Ждем, пока трек не доиграет до конца
+                    while pygame.mixer.music.get_busy():
+                        time.sleep(0.1)
+                else:
+                    time.sleep(1)
+    except Exception as e:
+        print(f"Sound error: {e}")
+
 # ================= ЛОГИКА ХАОСА =================
-def spawn_error_window():
-    """Создает окно с ошибкой в случайном месте."""
-    win = tk.Toplevel()
+def spawn_error_window(root):
+    win = tk.Toplevel(root)
     win.title("System Error")
     win.configure(bg="red")
     
-    # Рандомная позиция
-    x = random.randint(0, 1000)
-    y = random.randint(0, 800)
+    x = random.randint(0, root.winfo_screenwidth() - 300)
+    y = random.randint(0, root.winfo_screenheight() - 150)
     win.geometry(f"300x150+{x}+{y}")
     
-    # Текст ошибки
     msg = random.choice(ERROR_TEXTS)
     tk.Label(win, text=msg, bg="red", fg="white", font=("Consolas", 14, "bold")).pack(expand=True)
-    
-    # Чтобы окна не закрывались сразу
     win.protocol("WM_DELETE_WINDOW", lambda: None)
 
 def flying_images(root):
-    """Создает прозрачные окна с картинками, которые летают."""
     try:
-        # Загружаем картинки из папки assets
         imgs = []
-        for file in os.listdir(resource_path("assets")):
-            if file.endswith((".png", ".jpg", ".jpeg")):
-                img = Image.open(resource_path(f"assets/{file}"))
+        assets_path = resource_path("assets")
+        
+        if not os.path.exists(assets_path):
+            print("Assets folder not found.")
+            return
+            
+        for file in os.listdir(assets_path):
+            if file.lower().endswith((".png", ".jpg", ".jpeg")):
+                img = Image.open(os.path.join(assets_path, file))
+                # Ресайзим картинку
                 img = img.resize((random.randint(100, 300), random.randint(100, 300)))
                 imgs.append(ImageTk.PhotoImage(img))
         
-        if not imgs:
+        if not imgs: 
             return
 
-        # Создаем окна для картинок
         flying_windows = []
-        for _ in range(15): # 15 летающих окон
+        for _ in range(15):
             win = tk.Toplevel(root)
-            win.overrideredirect(True) # Убираем рамки и заголовок
-            win.attributes("-topmost", True) # Поверх всех окон
-            
-            lbl = tk.Label(win, bg="black") # Фон окна (можно сделать прозрачным через -transparentcolor)
+            win.overrideredirect(True)
+            win.attributes("-topmost", True)
+            lbl = tk.Label(win, bg="black") 
             lbl.pack()
             flying_windows.append((win, lbl, random.choice(imgs)))
 
-        # Анимация полета
-        velocities = [ [random.choice([-15, 15]), random.choice([-15, 15])] for _ in flying_windows ]
+        velocities = [[random.choice([-15, 15]), random.choice([-15, 15])] for _ in flying_windows]
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
 
         def move():
             for i, (win, lbl, img) in enumerate(flying_windows):
-                # Меняем картинку (мигание)
-                if random.random() < 0.3:
+                if random.random() < 0.2:
                     lbl.config(image=random.choice(imgs))
                 
-                # Получаем текущую позицию
                 x = win.winfo_x()
                 y = win.winfo_y()
                 
-                # Обновляем скорость
                 x += velocities[i][0]
                 y += velocities[i][1]
                 
-                # Отбиваемся от краев экрана
-                if x < 0 or x > SCREEN_W - 100:
-                    velocities[i][0] *= -1
-                if y < 0 or y > SCREEN_H - 100:
-                    velocities[i][1] *= -1
+                if x < 0 or x > screen_w - 150: velocities[i][0] *= -1
+                if y < 0 or y > screen_h - 150: velocities[i][1] *= -1
                 
                 win.geometry(f"+{x}+{y}")
             
-            root.after(20, move) # Рекурсивный вызов для анимации
+            root.after(20, move)
 
         move()
     except Exception as e:
         print(f"Image error: {e}")
 
 def chaos_loop(root):
-    """Бесконечно создает окна с ошибками."""
     while True:
-        spawn_error_window()
-        time.sleep(0.5) # Интервал между окнами
-
-def play_sound():
-    """Играет звук в цикле."""
-    try:
-        sound_path = resource_path("scream.mp3")
-        if os.path.exists(sound_path):
-            winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
-    except Exception as e:
-        print(f"Sound error: {e}")
+        spawn_error_window(root)
+        time.sleep(0.3)
 
 # ================= ЗАПУСК =================
 def main():
     root = tk.Tk()
-    root.withdraw() # Скрываем главное окно
+    root.withdraw()
     
-    # Получаем реальные размеры экрана
-    global SCREEN_W, SCREEN_H
-    SCREEN_W = root.winfo_screenwidth()
-    SCREEN_H = root.winfo_screenheight()
-
-    # Поток для музыки
     threading.Thread(target=play_sound, daemon=True).start()
-    
-    # Запуск летающих картинок
     root.after(100, lambda: flying_images(root))
-    
-    # Поток для спавна ошибок (или через root.after)
     threading.Thread(target=chaos_loop, args=(root,), daemon=True).start()
 
     root.mainloop()
